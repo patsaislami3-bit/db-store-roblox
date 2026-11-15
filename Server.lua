@@ -1,71 +1,77 @@
--- ServerScriptService - DB Store Server
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+-- Server DB Store - TANPA ADMIN
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local ToggleEvent = ReplicatedStorage:WaitForChild("DBStoreToggle")
-local UpdateEvent = ReplicatedStorage:WaitForChild("DBStoreUpdate")
+local function buatEvent(nama)
+	local e = ReplicatedStorage:FindFirstChild(nama)
+	if not e then
+		e = Instance.new("RemoteEvent")
+		e.Name = nama
+		e.Parent = ReplicatedStorage
+	end
+	return e
+end
 
-local playerData = {} -- Simpan data tiap player
-local playerStatus = {} -- Simpan ON/OFF tiap player
+local UpdateEvent = buatEvent("DBStoreUpdate")
+local ShopEvent = buatEvent("DBShopEvent")
+local SellEvent = buatEvent("DBSellEvent")
+local ToggleEvent = buatEvent("DBStoreToggle")
 
--- Bikin data awal 0 untuk player baru
+local playerData = {}
+
+local function kirimData(player)
+	local data = playerData[player]
+	if not data then return end
+	UpdateEvent:FireClient(player, {
+		sisa = data.sisa,
+		small = data.small,
+		medium = data.medium,
+		large = data.large,
+		water = data.water,
+		sugar = data.sugar,
+		gelatin = data.gelatin,
+		coin = data.coin,
+	})
+end
+
 Players.PlayerAdded:Connect(function(player)
 	playerData[player] = {
-		sisa = 0,
-		small = 0,
-		medium = 0,
-		large = 0,
-		water = 0,
-		sugar = 0,
-		gelatin = 0
+		sisa = 0, small = 0, medium = 0, large = 0,
+		water = 0, sugar = 0, gelatin = 0, coin = 100,
 	}
-	playerStatus[player] = true -- Default ON
+	task.wait(1)
+	kirimData(player)
 end)
 
 Players.PlayerRemoving:Connect(function(player)
 	playerData[player] = nil
-	playerStatus[player] = nil
 end)
 
--- Terima ON / OFF dari Client
-ToggleEvent.OnServerEvent:Connect(function(player, isOn)
-	playerStatus[player] = isOn
-	print(player.Name .. " DB Store: " .. (isOn and "ON" or "OFF"))
-end)
-
--- FUNGSI BUAT KIRIM UPDATE KE CLIENT
--- Panggil fungsi ini kalau ada perubahan bahan / hasil crafting
-local function sendUpdate(player)
+ShopEvent.OnServerEvent:Connect(function(player, namaBahan)
 	local data = playerData[player]
-	if data then
-		UpdateEvent:FireClient(player, data)
+	if not data then return end
+	if namaBahan == "Water" then
+		data.water += 10
+		data.sisa += 10
+	elseif namaBahan == "Sugar Block Bag" then
+		data.sugar += 10
+		data.sisa += 10
+	elseif namaBahan == "Gelatin" then
+		data.gelatin += 10
+		data.sisa += 10
 	end
-end
+	kirimData(player)
+end)
 
--- CONTOH CARA NAMBAH BAHAN (Kamu panggil ini dari sistem shop kamu)
--- Misal player beli 10 Water, panggil:
--- playerData[player].water += 10
--- playerData[player].sisa += 10
--- sendUpdate(player)
-
--- LOOP CRAFTING SEDERHANA (Contoh, hapus kalau sudah ada sistem sendiri)
-task.spawn(function()
-	while true do
-		task.wait(1)
-		for player, isOn in pairs(playerStatus) do
-			if isOn and playerData[player] then
-				local data = playerData[player]
-				-- Cek kalau bahan cukup, baru crafting jalan
-				if data.water > 0 and data.sugar > 0 and data.gelatin > 0 then
-					data.water -= 1
-					data.sugar -= 1
-					data.gelatin -= 1
-					data.small += 1
-					data.sisa -= 1
-					if data.sisa < 0 then data.sisa = 0 end
-					sendUpdate(player)
-				end
-			end
-		end
+SellEvent.OnServerEvent:Connect(function(player, jumlah)
+	local data = playerData[player]
+	if not data then return end
+	jumlah = tonumber(jumlah) or 10
+	if data.sisa >= jumlah then
+		data.sisa -= jumlah
+		data.coin += jumlah * 5
+		kirimData(player)
 	end
 end)
+
+print("DB Store Server Jalan! Tanpa Admin")
